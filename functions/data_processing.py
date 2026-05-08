@@ -1,15 +1,11 @@
 import pandas as pd
 
 
-COMPONENT_COST_COLUMNS = [
+COST_COLUMNS = [
     "labor_costs",
     "burden_costs",
     "material_costs",
     "outside_costs",
-]
-
-COST_COLUMNS = [
-    *COMPONENT_COST_COLUMNS,
     "total_costs",
 ]
 
@@ -52,12 +48,12 @@ def _coerce_cost_series(series: pd.Series) -> pd.Series:
     return pd.to_numeric(cleaned, errors="coerce")
 
 
-def _clamp_direct_cost(value):
-    """Return zero for tiny residual or negative direct costs that should not display."""
+def _clamp_small_residuals(value):
+    """Return zero for tiny floating-point residuals that should display as zero."""
     if pd.isna(value):
         return value
 
-    return 0 if abs(value) < 0.005 or value < 0 else value
+    return 0 if abs(value) < 0.005 else value
 
 
 def convert_rolled_costs_to_direct_costs(df: pd.DataFrame) -> pd.DataFrame:
@@ -72,9 +68,6 @@ def convert_rolled_costs_to_direct_costs(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
     present_cost_columns = [column for column in COST_COLUMNS if column in df.columns]
-    present_component_columns = [
-        column for column in COMPONENT_COST_COLUMNS if column in df.columns
-    ]
 
     for cost_column in present_cost_columns:
         rolled_column = ROLLED_COST_COLUMN_MAP[cost_column]
@@ -89,7 +82,7 @@ def convert_rolled_costs_to_direct_costs(df: pd.DataFrame) -> pd.DataFrame:
         parent_key = hierarchy_key[:-1]
         immediate_children_by_parent.setdefault(parent_key, []).append(row_position)
 
-    for cost_column in present_component_columns:
+    for cost_column in present_cost_columns:
         rolled_column = ROLLED_COST_COLUMN_MAP[cost_column]
         rolled_values = _coerce_cost_series(df[rolled_column])
         direct_values = df[cost_column].copy()
@@ -108,22 +101,11 @@ def convert_rolled_costs_to_direct_costs(df: pd.DataFrame) -> pd.DataFrame:
                 if child_positions
                 else 0
             )
-            direct_values.iloc[row_position] = _clamp_direct_cost(
+            direct_values.iloc[row_position] = _clamp_small_residuals(
                 current_rolled_value - child_rolled_sum
             )
 
         df[cost_column] = direct_values
-
-    if "total_costs" in df.columns and all(
-        column in df.columns for column in COMPONENT_COST_COLUMNS
-    ):
-        direct_component_values = pd.concat(
-            [_coerce_cost_series(df[column]) for column in COMPONENT_COST_COLUMNS],
-            axis=1,
-        )
-        df["total_costs"] = direct_component_values.sum(axis=1).apply(
-            _clamp_direct_cost
-        )
 
     return df
 
