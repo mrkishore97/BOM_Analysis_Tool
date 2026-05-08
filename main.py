@@ -6,6 +6,15 @@ from functions.visualization import plot_first_row_pie_chart, plot_code_distribu
 from functions.analysis import pareto_analysis, calculate_and_visualize_profit_loss, plot_pareto_analysis, analyze_filtered_pareto
 from functions.bom_structure import visualize_bom_streamlit
 
+
+def format_quantity_value(value):
+    """Format whole-number quantities without decimals and fractional quantities to two decimals."""
+    if pd.isna(value):
+        return ""
+
+    return f"{value:,.0f}" if float(value).is_integer() else f"{value:,.2f}"
+
+
 # Configure page
 st.set_page_config(page_title="BOM Analysis Tool", layout="wide")
 
@@ -241,7 +250,7 @@ if page == "BOM Analysis Tool":
     st.subheader("BOM Data - Detailed View")
     if st.session_state.df_excel is not None:
         # Select only specific columns to display
-        columns_to_display = ['part_number', 'index', 'code', 'outside_costs', 'material_costs', 'total_costs']
+        columns_to_display = ['part_number', 'index', 'needed', 'code', 'outside_costs', 'material_costs', 'total_costs']
 
         # Check if all columns exist in the dataframe
         available_columns = [col for col in columns_to_display if col in st.session_state.df_excel.columns]
@@ -249,11 +258,19 @@ if page == "BOM Analysis Tool":
         if available_columns:
             df_display = st.session_state.df_excel[available_columns].copy()
 
-            # Format currency columns for better readability
+            # Format quantity and currency columns for better readability
+            if 'needed' in df_display.columns:
+                qty_values = pd.to_numeric(df_display['needed'], errors='coerce')
+                df_display['needed'] = qty_values.apply(
+                    format_quantity_value
+                )
+
             currency_cols = ['outside_costs', 'material_costs', 'total_costs']
             for col in currency_cols:
                 if col in df_display.columns:
                     df_display[col] = df_display[col].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "$0.00")
+
+            df_display = df_display.rename(columns={'needed': 'Qty'})
 
             # Display the dataframe with scrolling
             st.dataframe(
@@ -478,14 +495,20 @@ elif page == "Pareto Analysis":
             st.subheader("Pareto Data Frame")
 
             # Select only specific columns
-            columns_to_display = ['part_number', 'description', 'material_costs', 'outside_costs', 'total_costs',
-                                  'row_perc', 'cum_perc']
+            columns_to_display = ['part_number', 'description', 'needed', 'material_costs', 'outside_costs',
+                                  'total_costs', 'row_perc', 'cum_perc']
             available_cols = [col for col in columns_to_display if col in st.session_state.pareto_data.columns]
 
             if available_cols:
                 display_df = st.session_state.pareto_data[available_cols].copy()
 
-                # Format currency columns for display
+                # Format quantity and currency columns for display
+                if 'needed' in display_df.columns:
+                    qty_values = pd.to_numeric(display_df['needed'], errors='coerce')
+                    display_df['needed'] = qty_values.apply(
+                        format_quantity_value
+                    )
+
                 currency_cols = ['material_costs', 'outside_costs', 'total_costs']
                 for col in currency_cols:
                     if col in display_df.columns:
@@ -497,10 +520,16 @@ elif page == "Pareto Analysis":
                     if col in display_df.columns:
                         display_df[col] = display_df[col].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "0.00%")
 
+                display_df = display_df.rename(columns={'needed': 'Qty'})
+
                 st.dataframe(display_df, use_container_width=True, height=500)
 
                 # Download button for pareto data
-                csv = st.session_state.pareto_data[available_cols].to_csv(index=False)
+                csv = (
+                    st.session_state.pareto_data[available_cols]
+                    .rename(columns={'needed': 'Qty'})
+                    .to_csv(index=False)
+                )
                 st.download_button(
                     label="Download Pareto Analysis (CSV)",
                     data=csv,
@@ -527,8 +556,8 @@ elif page == "Pareto Analysis":
 
             if st.session_state.filtered_pareto_data is not None:
                 # Columns to display for filtered data
-                filtered_columns = ['part_number', 'description', 'material_costs', 'outside_costs', 'total_costs',
-                                    'row_perc']
+                filtered_columns = ['part_number', 'description', 'needed', 'material_costs', 'outside_costs',
+                                    'total_costs', 'row_perc']
 
                 # 3M Parts
                 st.markdown("### 3M - Outside Service (Sorted by Outside Costs)")
@@ -538,6 +567,13 @@ elif page == "Pareto Analysis":
 
                     if available_3m_cols:
                         display_3m = df_3m[available_3m_cols].copy()
+
+                        # Format quantity
+                        if 'needed' in display_3m.columns:
+                            qty_values = pd.to_numeric(display_3m['needed'], errors='coerce')
+                            display_3m['needed'] = qty_values.apply(
+                                format_quantity_value
+                            )
 
                         # Format currency
                         for col in ['material_costs', 'outside_costs', 'total_costs']:
@@ -549,6 +585,8 @@ elif page == "Pareto Analysis":
                         if 'row_perc' in display_3m.columns:
                             display_3m['row_perc'] = display_3m['row_perc'].apply(
                                 lambda x: f"{x:.2f}%" if pd.notna(x) else "0.00%")
+
+                        display_3m = display_3m.rename(columns={'needed': 'Qty'})
 
                         st.dataframe(display_3m, use_container_width=True, height=300)
                         st.caption(f"Showing {len(display_3m)} parts")
@@ -566,6 +604,13 @@ elif page == "Pareto Analysis":
                     if available_2b_cols:
                         display_2b = df_2b[available_2b_cols].copy()
 
+                        # Format quantity
+                        if 'needed' in display_2b.columns:
+                            qty_values = pd.to_numeric(display_2b['needed'], errors='coerce')
+                            display_2b['needed'] = qty_values.apply(
+                                format_quantity_value
+                            )
+
                         # Format currency
                         for col in ['material_costs', 'outside_costs', 'total_costs']:
                             if col in display_2b.columns:
@@ -576,6 +621,8 @@ elif page == "Pareto Analysis":
                         if 'row_perc' in display_2b.columns:
                             display_2b['row_perc'] = display_2b['row_perc'].apply(
                                 lambda x: f"{x:.2f}%" if pd.notna(x) else "0.00%")
+
+                        display_2b = display_2b.rename(columns={'needed': 'Qty'})
 
                         st.dataframe(display_2b, use_container_width=True, height=300)
                         st.caption(f"Showing {len(display_2b)} parts")
@@ -593,6 +640,13 @@ elif page == "Pareto Analysis":
                     if available_raw_cols:
                         display_raw = df_raw[available_raw_cols].copy()
 
+                        # Format quantity
+                        if 'needed' in display_raw.columns:
+                            qty_values = pd.to_numeric(display_raw['needed'], errors='coerce')
+                            display_raw['needed'] = qty_values.apply(
+                                format_quantity_value
+                            )
+
                         # Format currency
                         for col in ['material_costs', 'outside_costs', 'total_costs']:
                             if col in display_raw.columns:
@@ -603,6 +657,8 @@ elif page == "Pareto Analysis":
                         if 'row_perc' in display_raw.columns:
                             display_raw['row_perc'] = display_raw['row_perc'].apply(
                                 lambda x: f"{x:.2f}%" if pd.notna(x) else "0.00%")
+
+                        display_raw = display_raw.rename(columns={'needed': 'Qty'})
 
                         st.dataframe(display_raw, use_container_width=True, height=300)
                         st.caption(f"Showing {len(display_raw)} parts")
