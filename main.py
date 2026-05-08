@@ -270,12 +270,7 @@ if page == "BOM Analysis Tool":
                 if col in df_display.columns:
                     df_display[col] = df_display[col].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "$0.00")
 
-            df_display = df_display.rename(columns={
-                'needed': 'Qty',
-                'outside_costs': 'Direct Outside Costs',
-                'material_costs': 'Direct Material Costs',
-                'total_costs': 'Direct Total Costs'
-            })
+            df_display = df_display.rename(columns={'needed': 'Qty'})
 
             # Display the dataframe with scrolling
             st.dataframe(
