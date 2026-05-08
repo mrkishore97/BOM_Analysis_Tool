@@ -1,115 +1,5 @@
 import pandas as pd
 
-
-COST_COLUMNS = [
-    "labor_costs",
-    "burden_costs",
-    "material_costs",
-    "outside_costs",
-    "total_costs",
-]
-
-ROLLED_COST_COLUMN_MAP = {
-    "labor_costs": "rolled_labor_costs",
-    "burden_costs": "rolled_burden_costs",
-    "material_costs": "rolled_material_costs",
-    "outside_costs": "rolled_outside_costs",
-    "total_costs": "rolled_total_costs",
-}
-
-
-def _parse_hierarchy_index(index_value):
-    """Parse a dotted hierarchy index into a tuple of integers, or None if invalid."""
-    if pd.isna(index_value):
-        return None
-
-    index_text = str(index_value).strip()
-    if not index_text:
-        return None
-
-    segments = index_text.split(".")
-    if any(not segment.isdigit() for segment in segments):
-        return None
-
-    return tuple(int(segment) for segment in segments)
-
-
-def _coerce_cost_series(series: pd.Series) -> pd.Series:
-    """Convert a cost series to numeric values without raising on imperfect exports."""
-    if pd.api.types.is_numeric_dtype(series):
-        return pd.to_numeric(series, errors="coerce")
-
-    cleaned = (
-        series.astype(str)
-        .str.replace("$", "", regex=False)
-        .str.replace(",", "", regex=False)
-        .str.strip()
-    )
-    return pd.to_numeric(cleaned, errors="coerce")
-
-
-def _clamp_small_residuals(value):
-    """Return zero for tiny floating-point residuals that should display as zero."""
-    if pd.isna(value):
-        return value
-
-    return 0 if abs(value) < 0.005 else value
-
-
-def convert_rolled_costs_to_direct_costs(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Preserve ERP rolled-up cost columns and replace display cost columns with direct costs.
-
-    Direct costs are calculated as the current row's rolled-up cost minus the rolled-up
-    costs of its immediate children in the dotted hierarchy index. Rows with malformed
-    or missing indexes are left unchanged so imperfect ERP exports do not fail uploads.
-    """
-    if "index" not in df.columns:
-        return df
-
-    present_cost_columns = [column for column in COST_COLUMNS if column in df.columns]
-
-    for cost_column in present_cost_columns:
-        rolled_column = ROLLED_COST_COLUMN_MAP[cost_column]
-        if rolled_column not in df.columns:
-            df[rolled_column] = df[cost_column]
-
-    parsed_indexes = df["index"].apply(_parse_hierarchy_index)
-    immediate_children_by_parent = {}
-    for row_position, hierarchy_key in enumerate(parsed_indexes):
-        if hierarchy_key is None or len(hierarchy_key) <= 1:
-            continue
-        parent_key = hierarchy_key[:-1]
-        immediate_children_by_parent.setdefault(parent_key, []).append(row_position)
-
-    for cost_column in present_cost_columns:
-        rolled_column = ROLLED_COST_COLUMN_MAP[cost_column]
-        rolled_values = _coerce_cost_series(df[rolled_column])
-        direct_values = df[cost_column].copy()
-
-        for row_position, hierarchy_key in enumerate(parsed_indexes):
-            if hierarchy_key is None:
-                continue
-
-            current_rolled_value = rolled_values.iloc[row_position]
-            if pd.isna(current_rolled_value):
-                continue
-
-            child_positions = immediate_children_by_parent.get(hierarchy_key, [])
-            child_rolled_sum = (
-                rolled_values.iloc[child_positions].dropna().sum()
-                if child_positions
-                else 0
-            )
-            direct_values.iloc[row_position] = _clamp_small_residuals(
-                current_rolled_value - child_rolled_sum
-            )
-
-        df[cost_column] = direct_values
-
-    return df
-
-
 # Your actual BOM processing function
 def process_bom_excel(file) -> pd.DataFrame:
     # Step 1: Read Excel
@@ -163,7 +53,6 @@ def process_bom_excel(file) -> pd.DataFrame:
             result.append(idx)
         return result
     df_excel["index"] = generate_index(df_excel["level"].astype(int).tolist())
-    df_excel = convert_rolled_costs_to_direct_costs(df_excel)
     return df_excel
 
 # Your actual cost calculation function
@@ -174,3 +63,4 @@ def get_costs(df: pd.DataFrame, labor_rate, labor_hours):
     labor_cost = labor_rate * labor_hours
     final_cost = labor_cost + total_cost
     return total_cost, outside_cost, material_cost, labor_cost, final_cost
+
