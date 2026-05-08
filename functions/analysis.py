@@ -41,7 +41,10 @@ def pareto_analysis(df, level_filter=None, code_filter=None, top_n=None, aggrega
             })
         )
     else:
-        grouped = data[["part_number", "description", "costs_1", "code", "material_costs", "outside_costs"]].copy()
+        grouped = data[[
+            "part_number", "description", "needed", "costs_1", "code",
+            "material_costs", "outside_costs", "total_costs"
+        ]].copy()
 
     # --- Sort descending ---
     grouped = grouped.sort_values("costs_1", ascending=False).reset_index(drop=True)
