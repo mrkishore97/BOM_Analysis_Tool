@@ -250,7 +250,7 @@ if page == "BOM Analysis Tool":
     st.subheader("BOM Data - Detailed View")
     if st.session_state.df_excel is not None:
         # Select only specific columns to display
-        columns_to_display = ['part_number', 'index', 'needed', 'code', 'outside_costs', 'material_costs', 'total_costs']
+        columns_to_display = ['part_number', 'description', 'index', 'needed', 'code', 'outside_costs', 'material_costs', 'total_costs']
 
         # Check if all columns exist in the dataframe
         available_columns = [col for col in columns_to_display if col in st.session_state.df_excel.columns]
